@@ -15,6 +15,7 @@ namespace Isotope\Model\Shipping;
 use Isotope\Isotope;
 use Isotope\Interfaces\IsotopeShipping;
 use Isotope\Model\Shipping;
+use Isotope\Factory\ProductCollectionSurcharge as SurchargeFactory;
 
 
 /**
@@ -126,11 +127,6 @@ class WeightTotal extends Shipping implements IsotopeShipping
             return false;
         }
 
-        return Isotope::getInstance()->calculateSurcharge(
-                                $objOptions->rate,
-                                ($GLOBALS['TL_LANG']['MSC']['shippingLabel'] . ' (' . $this->label . ')'),
-                                $this->arrData['tax_class'],
-                                $objCollection->getProducts(),
-                                $this);
+        return SurchargeFactory::buildShippingSurcharge($this, $objCollection);
     }
 }

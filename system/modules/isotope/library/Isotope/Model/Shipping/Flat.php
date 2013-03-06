@@ -13,6 +13,7 @@
 namespace Isotope\Model\Shipping;
 
 use Isotope\Isotope;
+use Isotope\Interfaces\IsotopeProductCollection;
 use Isotope\Model\Shipping;
 
 
@@ -27,103 +28,53 @@ class Flat extends Shipping
 {
 
     /**
-     * Return an object property
-     *
-     * @access public
-     * @param string
-     * @return mixed
-     */
-    public function __get($strKey)
-    {
-        switch( $strKey )
-        {
-            case 'price':
-                return Isotope::getInstance()->calculatePrice($this->getPrice(), $this, 'price', $this->arrData['tax_class']);
-                break;
-        }
-
-        return parent::__get($strKey);
-    }
-
-
-    /**
-     * Get the checkout surcharge for this shipping method
-     */
-    public function getSurcharge($objCollection)
-    {
-        $fltPrice = $this->getPrice();
-
-        if ($fltPrice == 0)
-        {
-            return false;
-        }
-
-        return Isotope::getInstance()->calculateSurcharge(
-                                $fltPrice,
-                                ($GLOBALS['TL_LANG']['MSC']['shippingLabel'] . ' (' . $this->label . ')'),
-                                $this->arrData['tax_class'],
-                                $objCollection->getProducts(),
-                                $this);
-    }
-
-
-    /**
-     * Calculate the price based on module configuration
+     * Return calculated price for this shipping method
      * @return float
      */
-    private function getPrice()
+    public function getPrice(IsotopeProductCollection $objCollection=null)
     {
-        $strPrice = $this->arrData['price'];
-        $blnPercentage = substr($strPrice, -1) == '%' ? true : false;
-
-        if ($blnPercentage)
-        {
-            $fltSurcharge = (float) substr($strPrice, 0, -1);
-            $fltPrice = Isotope::getCart()->subTotal / 100 * $fltSurcharge;
-        }
-        else
-        {
-            $fltPrice = (float) $strPrice;
+        if (null === $objCollection) {
+            $objCollection = Isotope::getCart();
         }
 
-        switch( $this->flatCalculation )
+        if ($this->isPercentage()) {
+            $fltPrice = $objCollection->subTotal / 100 * $this->getPercentage();
+        } else {
+            $fltPrice = (float) $this->arrData['price'];
+        }
+        
+        // Calculate surcharge from a product if the surcharge field is set in module settings
+        $intSurcharge = 0;
+        
+        if ($this->surcharge_field != '')
+        {
+            $arrProducts = Isotope::getCart()->getProducts();
+    
+            foreach ($arrProducts as $objProduct)
+            {
+                if ($this->flatCalculation == 'perItem')
+                {
+                    $intSurcharge += ($objProduct->quantity_requested * floatval($objProduct->{$this->surcharge_field}));
+                }
+                else
+                {
+                    $intSurcharge += floatval($objProduct->{$this->surcharge_field});
+                }
+            }
+        }
+        
+        switch ($this->flatCalculation)
         {
             case 'perProduct':
-                return (($fltPrice * Isotope::getCart()->products) + $this->calculateSurcharge());
+                $fltPrice = (($fltPrice * $objCollection->products) + $intSurcharge);
 
             case 'perItem':
-                return (($fltPrice * Isotope::getCart()->items) + $this->calculateSurcharge());
+                $fltPrice = (($fltPrice * $objCollection->items) + $intSurcharge);
 
             default:
-                return ($fltPrice + $this->calculateSurcharge());
+                $fltPrice = ($fltPrice + $intSurcharge);
         }
-    }
-
-
-    /**
-     * Calculate surcharge from a product if the surcharge field is set in module settings
-     * @return float
-     */
-    protected function calculateSurcharge()
-    {
-        if (!strlen($this->surcharge_field))
-            return 0;
-
-        $intSurcharge = 0;
-        $arrProducts = Isotope::getCart()->getProducts();
-
-        foreach( $arrProducts as $objProduct )
-        {
-            if ($this->flatCalculation == 'perItem')
-            {
-                $intSurcharge += ($objProduct->quantity_requested * floatval($objProduct->{$this->surcharge_field}));
-            }
-            else
-            {
-                $intSurcharge += floatval($objProduct->{$this->surcharge_field});
-            }
-        }
-
-        return $intSurcharge;
+        
+        return Isotope::calculatePrice($fltPrice, $this, 'price', $this->arrData['tax_class']);
     }
 }
